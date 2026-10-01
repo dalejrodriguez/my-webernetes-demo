@@ -810,6 +810,58 @@ const PROTECT_DEMO_STEPS: DemoStep[] = [
   },
 ];
 
+// Steps for the optional "ExploitGym Agent Demo" - a self-contained attacker
+// walkthrough that contrasts a shared-kernel proxy with an Edera-isolated one.
+// Completing it awards no reward (see markDemoStepComplete); it is purely for
+// exploration. Step ids are namespaced "exploitgym-*" so they never collide
+// with the Edera demo's step ids and progress in each demo persists
+// independently when toggling between them.
+const EXPLOITGYM_DEMO_STEPS: DemoStep[] = [
+  {
+    id: "exploitgym-pods",
+    title: "Inspect the ExploitGym pods",
+    description:
+      "List the three scenario pods. Notice <code class='guide-code'>proxy-control</code> shares the host kernel (no runtimeClass) while <code class='guide-code'>proxy-edera</code> runs inside an isolated Edera zone.",
+    command:
+      "kubectl get pods -n exploitgym agent proxy-control proxy-edera -o custom-columns=POD:.metadata.name,RUNTIME_CLASS:.spec.runtimeClassName,ROLE:.metadata.labels.variant",
+  },
+  {
+    id: "exploitgym-agent",
+    title: "Confirm the agent is sandboxed",
+    description:
+      "The agent has no internet - its only egress is the cache proxy. Watch it try to reach HuggingFace directly and get blocked.",
+    command: "agent_to_hf",
+  },
+  {
+    id: "exploitgym-attack-control",
+    title: "Attack the shared-kernel proxy",
+    description:
+      "Fire the poisoned-artifact deserialization 0-day at <code class='guide-code'>proxy-control</code>. The RCE escapes to the node: host canary read, a stolen neighbor token, leaked DB credentials, and a pivot to HuggingFace.",
+    command: "attack control",
+  },
+  {
+    id: "exploitgym-falco-host",
+    title: "See the host-level detections",
+    description:
+      "Query Falco's host source. The escape shows up as CRITICAL / WARNING host events.",
+    command: "falco_alerts host",
+  },
+  {
+    id: "exploitgym-attack-edera",
+    title: "Attack the Edera-isolated proxy",
+    description:
+      "Fire the <em>identical</em> 0-day at <code class='guide-code'>proxy-edera</code>. The RCE still runs, but every step is contained - no canary, no neighbor token, no internet.",
+    command: "attack edera",
+  },
+  {
+    id: "exploitgym-falco-zone",
+    title: "See the containment in Falco",
+    description:
+      "Query Falco's zone source. The same activity is attributed to the Edera zone and confined within it - it never reached the host.",
+    command: "falco_alerts zone",
+  },
+];
+
 async function initTerminalDemo() {
 
   const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -823,6 +875,13 @@ async function initTerminalDemo() {
           <h1>Webernetes × Edera</h1>
           <p>Secure workload execution, directly in your browser.</p>
         </div>
+        <a
+          href="https://on.edera.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="edera-free-cta"
+          style="margin-left:auto;display:inline-block;padding:10px 18px;border-radius:999px;background:#b8ff3c;color:#081716;font-weight:800;text-decoration:none;white-space:nowrap;align-self:center;"
+        >Try out Edera for free →</a>
       </header>
 
       <section class="brand-hero" aria-labelledby="hero-title">
@@ -919,14 +978,21 @@ async function initTerminalDemo() {
         <div class="guide-header">
           <span class="drag-handle">⋮⋮</span>
           <div>
-            <div class="guide-title">🧭 Edera Demo Guide</div>
-            <div class="guide-subtitle">
+            <div class="guide-title" id="guide-title">🧭 Edera Demo Guide</div>
+            <div class="guide-subtitle" id="guide-subtitle">
               Run each command below to walk through the isolation lifecycle
             </div>
           </div>
 
           <div id="guide-progress" class="guide-progress"></div>
 
+          <button
+            type="button"
+            class="hide-btn"
+            id="exploitgym-toggle-btn"
+            title="Swap this guide between the Edera walkthrough and the ExploitGym attacker demo"
+            style="border:1px solid rgba(0,229,212,.5);color:#00e5d4;"
+          >🕵️ Try the ExploitGym demo</button>
           <button class="hide-btn" id="hide-guide-btn">Hide</button>
         </div>
 
@@ -951,6 +1017,18 @@ async function initTerminalDemo() {
           </div>
 
         </div>
+      </div>
+
+      <div
+        class="edera-free-bottom"
+        style="display:flex;justify-content:center;margin:32px 0 8px;"
+      >
+        <a
+          href="https://on.edera.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="display:inline-block;padding:14px 30px;border-radius:999px;background:#b8ff3c;color:#081716;font-weight:800;font-size:16px;text-decoration:none;box-shadow:0 10px 30px rgba(184,255,60,.25);"
+        >Try out Edera for free →</a>
       </div>
 
       <div class="edera-footer">
@@ -1836,24 +1914,29 @@ const renderNodes = () => {
     renderProtectZones();
   };
   let selectedDemoStepIndex: number | null = null;
+  // Which walkthrough the guide panel is currently showing. The guide renderer
+  // reads `activeDemoSteps` rather than a fixed array so the ExploitGym toggle
+  // can swap the step set without touching the rest of the machinery.
+  let activeDemoMode: "edera" | "exploitgym" = "edera";
+  let activeDemoSteps: DemoStep[] = PROTECT_DEMO_STEPS;
   const getNextDemoStepIndex = (): number => {
-    const index = PROTECT_DEMO_STEPS.findIndex(
+    const index = activeDemoSteps.findIndex(
       (step) => !completedDemoSteps.has(step.id),
     );
-    return index === -1 ? PROTECT_DEMO_STEPS.length - 1 : index;
+    return index === -1 ? activeDemoSteps.length - 1 : index;
   };
   const getSelectedDemoStepIndex = (): number => {
     if (
       selectedDemoStepIndex !== null &&
       selectedDemoStepIndex >= 0 &&
-      selectedDemoStepIndex < PROTECT_DEMO_STEPS.length
+      selectedDemoStepIndex < activeDemoSteps.length
     ) {
       return selectedDemoStepIndex;
     }
     return getNextDemoStepIndex();
   };
   const selectDemoStep = (index: number) => {
-    if (index < 0 || index >= PROTECT_DEMO_STEPS.length) {
+    if (index < 0 || index >= activeDemoSteps.length) {
       return;
     }
     selectedDemoStepIndex = index;
@@ -1861,8 +1944,8 @@ const renderNodes = () => {
   };
   const renderGuide = () => {
     const currentIndex = getSelectedDemoStepIndex();
-    const currentStep = PROTECT_DEMO_STEPS[currentIndex];
-    guideProgress.innerHTML = PROTECT_DEMO_STEPS.map((step, index) => {
+    const currentStep = activeDemoSteps[currentIndex];
+    guideProgress.innerHTML = activeDemoSteps.map((step, index) => {
       const done = completedDemoSteps.has(step.id);
       const current = index === currentIndex && !done;
       return `
@@ -1882,7 +1965,7 @@ const renderNodes = () => {
       }`;
     guideDescription.innerHTML = currentStep.description;
     suggestedCommand.innerText = currentStep.command;
-    guideStepList.innerHTML = PROTECT_DEMO_STEPS.map((step, index) => {
+    guideStepList.innerHTML = activeDemoSteps.map((step, index) => {
       const done = completedDemoSteps.has(step.id);
       const current = index === currentIndex && !done;
       const selected = index === currentIndex;
@@ -1914,21 +1997,71 @@ const renderNodes = () => {
     const selectedStep =
       selectedDemoStepIndex === null
         ? undefined
-        : PROTECT_DEMO_STEPS[selectedDemoStepIndex];
+        : activeDemoSteps[selectedDemoStepIndex];
     if (selectedStep === undefined || selectedStep.id === stepId) {
-      const nextIndex = PROTECT_DEMO_STEPS.findIndex(
+      const nextIndex = activeDemoSteps.findIndex(
         (step) => !completedDemoSteps.has(step.id),
       );
       selectedDemoStepIndex =
-        nextIndex === -1 ? PROTECT_DEMO_STEPS.length - 1 : nextIndex;
+        nextIndex === -1 ? activeDemoSteps.length - 1 : nextIndex;
     }
     renderGuide();
-    if (!wasComplete && isDemoComplete()) {
+    // Only the Edera walkthrough awards a completion. The ExploitGym demo is
+    // just for exploration - no reward modal.
+    if (activeDemoMode === "edera" && !wasComplete && isDemoComplete()) {
       requestAnimationFrame(() => {
         showCompletionModal();
       });
     }
   };
+  // Swap the guide panel between the Edera walkthrough and the ExploitGym
+  // attacker demo. Completed-step progress is intentionally NOT cleared, so
+  // each demo remembers how far you got when you toggle back and forth.
+  const setDemoMode = (mode: "edera" | "exploitgym") => {
+    activeDemoMode = mode;
+    activeDemoSteps =
+      mode === "exploitgym" ? EXPLOITGYM_DEMO_STEPS : PROTECT_DEMO_STEPS;
+    selectedDemoStepIndex = null;
+
+    const titleEl = document.querySelector<HTMLDivElement>("#guide-title");
+    const subtitleEl =
+      document.querySelector<HTMLDivElement>("#guide-subtitle");
+    const toggleEl = document.querySelector<HTMLButtonElement>(
+      "#exploitgym-toggle-btn",
+    );
+
+    if (titleEl) {
+      titleEl.innerText =
+        mode === "exploitgym"
+          ? "🕵️ ExploitGym Agent Demo"
+          : "🧭 Edera Demo Guide";
+    }
+    if (subtitleEl) {
+      subtitleEl.innerText =
+        mode === "exploitgym"
+          ? "Walk a sandboxed agent's 0-day through a shared-kernel proxy, then watch Edera contain the exact same attack"
+          : "Run each command below to walk through the isolation lifecycle";
+    }
+    if (toggleEl) {
+      toggleEl.innerText =
+        mode === "exploitgym"
+          ? "← Back to Edera demo"
+          : "🕵️ Try the ExploitGym demo";
+      toggleEl.classList.toggle("active", mode === "exploitgym");
+    }
+
+    renderGuide();
+  };
+
+  const exploitgymToggleBtn = document.querySelector<HTMLButtonElement>(
+    "#exploitgym-toggle-btn",
+  );
+  if (exploitgymToggleBtn) {
+    exploitgymToggleBtn.addEventListener("click", () => {
+      setDemoMode(activeDemoMode === "exploitgym" ? "edera" : "exploitgym");
+    });
+  }
+
   guideStepList.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     const button = target.closest<HTMLButtonElement>("button[data-step-index]");
@@ -1943,7 +2076,7 @@ const renderNodes = () => {
   });
   useCommandBtn.addEventListener("click", () => {
     const index = getSelectedDemoStepIndex();
-    const step = PROTECT_DEMO_STEPS[index];
+    const step = activeDemoSteps[index];
     input.value = step.command;
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
@@ -6890,6 +7023,7 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
               "namespace/exploitgym",
               "listed agent, proxy-control (shared kernel) and proxy-edera (edera runtimeClass)",
             );
+            markDemoStepComplete("exploitgym-pods");
             return;
           }
 
@@ -6979,6 +7113,7 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
             "exploitgym/agent",
             "agent direct egress to huggingface.co blocked; cache proxy is the only reachable hop",
           );
+          markDemoStepComplete("exploitgym-agent");
           return;
         }
 
@@ -7048,6 +7183,7 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
               "node/proxy-control",
               "pivoted from the node network to huggingface.co",
             );
+            markDemoStepComplete("exploitgym-attack-control");
           } else {
             // Edera-isolated proxy: identical RCE, but it never leaves the
             // guest's own kernel / network namespace.
@@ -7078,6 +7214,7 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
               `zone/${EXPLOITGYM_EDERA_ZONE_ID}`,
               "identical RCE fired inside the Edera zone but could not reach the host canary, neighbor tokens, or the internet",
             );
+            markDemoStepComplete("exploitgym-attack-edera");
           }
 
           return;
@@ -7106,6 +7243,7 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
               "host",
               "host-source Falco saw the canary read on the node filesystem (file=/opt/host-canary)",
             );
+            markDemoStepComplete("exploitgym-falco-host");
           } else {
             const z = EXPLOITGYM_EDERA_ZONE_ID;
             printPre(
@@ -7120,6 +7258,7 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
               `zone/${z}`,
               "zone-source Falco attributes the same activity to the Edera zone, confined - never reached the host",
             );
+            markDemoStepComplete("exploitgym-falco-zone");
           }
 
           return;
