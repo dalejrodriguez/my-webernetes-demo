@@ -4951,27 +4951,36 @@ Kernel isolation: enabled</span>`);
     }
     if (tokens[1] === "describe") {
       const resource = tokens[2];
-      const name = tokens[3];
       let requestedNamespace = "default";
+      let name: string | undefined;
 
-      for (let i = 4; i < tokens.length; i++) {
-        if (tokens[i] === "-n" || tokens[i] === "--namespace") {
+      // Walk the args after the resource so the pod/node name and the
+      // -n/--namespace flag can appear in any order, e.g. both
+      // `describe pod agent -n exploitgym` and
+      // `describe pod -n exploitgym agent` resolve correctly.
+      for (let i = 3; i < tokens.length; i++) {
+        const token = tokens[i];
+        if (token === "-n" || token === "--namespace") {
           requestedNamespace = tokens[++i] || requestedNamespace;
-        } else if (tokens[i].startsWith("--namespace=")) {
-          requestedNamespace = tokens[i].split("=")[1] || requestedNamespace;
+        } else if (token.startsWith("--namespace=")) {
+          requestedNamespace = token.split("=")[1] || requestedNamespace;
+        } else if (token.startsWith("-")) {
+          continue;
+        } else if (name === undefined) {
+          name = token;
         }
       }
 
       if (!resource || !name) {
         printHtml(
-          `<span style="color:#ff7373;">Usage: kubectl describe pod|node &lt;name&gt;</span>`,
+          `<span style="color:#ff7373;">Usage: kubectl describe pod|node &lt;name&gt; [-n &lt;namespace&gt;]</span>`,
         );
         return true;
       }
 
       if (resource === "pod" || resource === "pods") {
         const pod = pods.find(
-          (item) => item.name === name && item.namespace === "default",
+          (item) => item.name === name && item.namespace === requestedNamespace,
         );
 
         if (!pod) {
@@ -5168,7 +5177,7 @@ Kernel isolation: enabled</span>`);
       }
 
       if (resource === "pvc" || resource === "persistentvolumeclaim" || resource === "persistentvolumeclaims") {
-        const pvc = persistentVolumeClaims.find((item) => item.name === name && item.namespace === "default");
+        const pvc = persistentVolumeClaims.find((item) => item.name === name && item.namespace === requestedNamespace);
         if (!pvc) { printHtml(`<span style="color:#ff7373;">Error from server (NotFound): persistentvolumeclaims "${escapeHtml(name)}" not found</span>`); return true; }
         const lines = [`Name:              ${pvc.name}`, `Namespace:         ${pvc.namespace}`, `Status:            ${pvc.status}`, `Volume:            ${pvc.volumeName}`, `Capacity:          ${pvc.capacity}`, `Access Modes:      ${pvc.accessModes}`, `VolumeMode:        ${pvc.volumeMode}`, `StorageClass:      ${pvc.storageClassName || "<none>"}`, `Formatted:         ${pvc.formatted}`, `Events:`, `  Normal  ${pvc.status === "Bound" ? "Bound" : "Pending"}  1m  controller  ${pvc.status === "Bound" ? `Successfully bound to ${pvc.volumeName}` : "Waiting for a matching PersistentVolume"}`];
         printPre(escapeHtml(lines.join("\n"))); return true;
@@ -5182,7 +5191,7 @@ Kernel isolation: enabled</span>`);
       }
 
       if (resource === "job" || resource === "jobs") {
-        const job = jobs.find((item) => item.name === name && item.namespace === "default");
+        const job = jobs.find((item) => item.name === name && item.namespace === requestedNamespace);
         if (!job) { printHtml(`<span style="color:#ff7373;">Error from server (NotFound): jobs.batch "${escapeHtml(name)}" not found</span>`); return true; }
         const lines = [`Name:              ${job.name}`, `Namespace:         ${job.namespace}`, `Completions:       ${job.succeeded}/${job.completions}`, `Status:            ${job.status}`, `Image:             ${job.image}`, `RuntimeClass:      ${job.runtimeClassName || "<default>"}`, `Device:            ${job.targetDevice || "<none>"}`, `Claim:             ${job.claimName || "<none>"}`];
         printPre(escapeHtml(lines.join("\n"))); return true;
