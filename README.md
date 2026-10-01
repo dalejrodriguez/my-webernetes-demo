@@ -608,7 +608,12 @@ The RCE escapes to the node:
 ```
 attack control
 ```
-Queries Falco's host source. Shows the escape as ```CRITICAL```/```WARNING``` host-level detections (canary exfiltrated, namespace breakout, untrusted deserialization).
+Queries Falco's host source. Shows the escape as ```CRITICAL```/```WARNING``` host-level detections:
+
+- Canary exfiltrated
+- Namespace breakout
+- Untrusted deserialization
+  
 ```
 falco_alerts host
 ```
