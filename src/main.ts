@@ -871,16 +871,12 @@ async function initTerminalDemo() {
 
       <header class="top-header">
         <a href="https://edera.dev" class="logo-link">EDERA</a>
-        <div>
-          <h1>Webernetes × Edera</h1>
-          <p>Secure workload execution, directly in your browser.</p>
-        </div>
         <a
           href="https://on.edera.dev"
           target="_blank"
           rel="noopener noreferrer"
           class="edera-free-cta"
-          style="margin-left:auto;display:inline-block;padding:10px 18px;border-radius:999px;background:#b8ff3c;color:#081716;font-weight:800;text-decoration:none;white-space:nowrap;align-self:center;"
+          style="justify-self:end;align-self:center;display:inline-flex;align-items:center;padding:12px 22px;border-radius:999px;background:var(--edera-lime);color:var(--edera-ink);font-weight:800;text-decoration:none;white-space:nowrap;"
         >Try out Edera for free →</a>
       </header>
 
