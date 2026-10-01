@@ -588,7 +588,11 @@ find . -type f
 ```
 
 ## ExploitGym
-Shows the three pods. <br/>
+Show all pods with their associated ```runtimeclass```:
+```
+kubectl get pods -A -o custom-columns=POD:.metadata.name,RUNTIME_CLASS:.spec.runtimeClassName,ROLE:.metadata.labels.variant
+```
+Shows the 3 pods in the ```exploitgym``` namespace. <br/>
 The point to notice: ```proxy-control``` has ```<none>``` for RuntimeClass (shared host kernel), <br/>
 while ```proxy-edera``` has ```edera``` (isolated zone). Same proxy, two isolation models.
 ```
