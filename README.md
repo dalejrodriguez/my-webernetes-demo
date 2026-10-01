@@ -612,7 +612,10 @@ Queries Falco's host source. Shows the escape as ```CRITICAL```/```WARNING``` ho
 ```
 falco_alerts host
 ```
-Fires the identical payload at the Edera-isolated proxy. The RCE still runs (```whoami: 0:0```), but every step comes back ```[contained]``` — canary unreachable, no neighbor token, HuggingFace unreachable. Same exploit, contained.
+Fires the identical payload at the Edera-isolated proxy. The RCE still runs (```whoami: 0:0```), but every step comes back ```[contained]``` 
+- Canary unreachable
+- No neighbor token
+- HuggingFace unreachable... Same exploit, contained.
 ```
 attack edera
 ```
