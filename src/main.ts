@@ -3308,6 +3308,40 @@ const renderNodes = () => {
           </div>
         </div>
 
+        <div class="cli-help-section">
+          <div class="cli-help-section-title">ExploitGym breakout</div>
+
+          <div class="cli-help-command">
+            <code>kubectl get pods -n exploitgym agent proxy-control proxy-edera -o custom-columns=...</code>
+            <span>Show the three scenario pods: the agent and the cache proxy running both with and without the edera runtimeClass.</span>
+          </div>
+
+          <div class="cli-help-command">
+            <code>agent_to_hf</code>
+            <span>Confirm the sandboxed agent has no internet; its only egress is the cache proxy.</span>
+          </div>
+
+          <div class="cli-help-command">
+            <code>attack control</code>
+            <span>Fire the poisoned-artifact deserialization 0-day at the shared-kernel proxy; the RCE escapes to the node.</span>
+          </div>
+
+          <div class="cli-help-command">
+            <code>attack edera</code>
+            <span>Fire the identical 0-day at the Edera-isolated proxy; the RCE still runs but is contained to its zone.</span>
+          </div>
+
+          <div class="cli-help-command">
+            <code>falco_alerts host</code>
+            <span>Query Falco's host source for the control-proxy escape detections.</span>
+          </div>
+
+          <div class="cli-help-command">
+            <code>falco_alerts zone</code>
+            <span>Query Falco's zone source and see the same edera-proxy activity attributed to, and confined within, its Edera zone.</span>
+          </div>
+        </div>
+
         <div class="cli-help-tip">
           Tip: use the Edera Demo Guide below the terminal to walk through
           the isolation lifecycle step-by-step.
@@ -6834,6 +6868,31 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
             return;
           }
 
+          if (
+            tokens[1] === "get" &&
+            tokens[2] === "pods" &&
+            tokens.includes("-n") &&
+            tokens[tokens.indexOf("-n") + 1] === "exploitgym"
+          ) {
+            // ExploitGym breakout scenario: three pods - the agent (the model),
+            // and the cache proxy twice. The two proxies are identical except
+            // for runtimeClassName: proxy-control shares the host kernel, while
+            // proxy-edera runs inside an isolated Edera zone.
+            printPre(
+              `<span style="color:#dff7f0;">POD              RUNTIME_CLASS   ROLE</span>\n` +
+                `<span style="color:#dff7f0;">agent            &lt;none&gt;          &lt;none&gt;</span>\n` +
+                `<span style="color:#dff7f0;">proxy-control    &lt;none&gt;          control</span>\n` +
+                `<span style="color:#b8ff3c;">proxy-edera      edera           edera</span>`,
+            );
+            addEvent(
+              "Normal",
+              "PodsListed",
+              "namespace/exploitgym",
+              "listed agent, proxy-control (shared kernel) and proxy-edera (edera runtimeClass)",
+            );
+            return;
+          }
+
           const handled =
             await handleKubectlCommand(
               rawCmd,
@@ -6894,6 +6953,178 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
 
           return;
         }
+        // ───────────────────────────────────────────────────────────────
+        // ExploitGym "AI agent sandbox breakout" scenario (demo-proxy.sh)
+        //
+        // A sandboxed agent's only egress is a package-registry CACHE PROXY.
+        // The agent pushes a poisoned artifact; the proxy deserializes it to
+        // "extract metadata" and that is the 0-day -> RCE inside the proxy.
+        // Run the SAME payload against the shared-kernel control proxy and it
+        // escapes to the node; run it against the Edera-isolated proxy and the
+        // identical 0-day is contained. Isolation does not stop the code from
+        // running, it stops where that code can go.
+        // ───────────────────────────────────────────────────────────────
+        const EXPLOITGYM_EDERA_ZONE_ID =
+          "c2d09727-f3d6-4036-8334-7ec6147685a4";
+
+        if (tokens[0] === "agent_to_hf") {
+          printPre(
+            `<span style="color:#a8cfca;"># the agent is sandboxed - no internet, it can only reach the proxy</span>\n` +
+              `<span style="color:#dff7f0;">agent → huggingface.co: 000</span>\n` +
+              `<span style="color:#ff7373;">agent → huggingface.co: BLOCKED</span>`,
+          );
+          addEvent(
+            "Info",
+            "EgressBlocked",
+            "exploitgym/agent",
+            "agent direct egress to huggingface.co blocked; cache proxy is the only reachable hop",
+          );
+          return;
+        }
+
+        if (tokens[0] === "attack") {
+          const target = tokens[1];
+
+          if (target !== "control" && target !== "edera") {
+            printHtml(
+              `<span style="color:#ff7373;">attack: choose a target proxy. Try: attack control | attack edera</span>`,
+            );
+            return;
+          }
+
+          const host =
+            target === "control" ? "proxy-control" : "proxy-edera";
+
+          // The deserialization RCE fires in BOTH variants - the payload runs
+          // as root (0:0) inside the proxy either way.
+          printPre(
+            `<span style="color:#a8cfca;">######################################################################</span>\n` +
+              `<span style="color:#dff7f0;"># [payload] deserialization RCE fired</span>\n` +
+              `<span style="color:#dff7f0;">#   whoami: 0:0   host: ${host}</span>\n` +
+              `<span style="color:#a8cfca;">######################################################################</span>`,
+          );
+
+          if (target === "control") {
+            // Shared-kernel proxy: the RCE reaches the node and everything
+            // the node can touch.
+            printPre(
+              `<span style="color:#00e5d4;">═ host escape: read the Dom0-only canary via nsenter ═</span>\n` +
+                `<span style="color:#ff7373;">TOP SECRET HOST FILE</span>\n` +
+                `<span style="color:#ff7373;">  [ESCAPED] read host canary off the node filesystem</span>\n` +
+                `\n` +
+                `<span style="color:#00e5d4;">═ lateral movement: steal a neighbor tenant's token, read their secrets ═</span>\n` +
+                `<span style="color:#00e5d4;">  ═ locate a stolen token: team-analytics/analytics-job ═</span>\n` +
+                `<span style="color:#ff7373;"> got it (this SA lives in team-analytics, NOT team-payments)</span>\n` +
+                `<span style="color:#00e5d4;">  ═ how many secrets can this one stolen token read, cluster-wide? ═</span>\n` +
+                `<span style="color:#ff7373;">  readable secrets across ALL namespaces: 8</span>\n` +
+                `<span style="color:#00e5d4;">  ═ cross-tenant theft: read team-payments/payments-db with analytics token ═</span>\n` +
+                `<span style="color:#ff7373;">  DB_HOST = payments-db.prod.internal</span>\n` +
+                `<span style="color:#ff7373;">  DB_PASSWORD = S3cr3t-Pr0d-DB-pw!</span>\n` +
+                `<span style="color:#ff7373;">  DB_USERNAME = payments_app</span>\n` +
+                `<span style="color:#00e5d4;">  ═ same token, grab kube-system secrets too (count) ═</span>\n` +
+                `<span style="color:#dff7f0;">  kube-system secrets readable: 0</span>\n` +
+                `\n` +
+                `<span style="color:#00e5d4;">═ reach the internet: pivot to HuggingFace (the ExploitGym objective) ═</span>\n` +
+                `<span style="color:#ff7373;">  [ESCAPED] reached huggingface.co from the node network</span>\n` +
+                `\n` +
+                `<span style="color:#a8cfca;">═ payload complete ═</span>`,
+            );
+
+            addEvent(
+              "Warning",
+              "HostCanaryExfiltrated",
+              "node/proxy-control",
+              "shared-kernel proxy escaped to the node and read the Dom0-only host canary",
+            );
+            addEvent(
+              "Warning",
+              "CrossTenantSecretRead",
+              "team-payments/payments-db",
+              "stolen team-analytics token read 8 secrets cluster-wide, incl. team-payments DB credentials",
+            );
+            addEvent(
+              "Warning",
+              "ExploitGymObjectiveReached",
+              "node/proxy-control",
+              "pivoted from the node network to huggingface.co",
+            );
+          } else {
+            // Edera-isolated proxy: identical RCE, but it never leaves the
+            // guest's own kernel / network namespace.
+            printPre(
+              `<span style="color:#00e5d4;">═ host escape: read the Dom0-only canary via nsenter ═</span>\n` +
+                `<span style="color:#b8ff3c;"> [contained] host canary unreachable from here</span>\n` +
+                `\n` +
+                `<span style="color:#00e5d4;">═ lateral movement: steal a neighbor tenant's token, read their secrets ═</span>\n` +
+                `<span style="color:#00e5d4;">  ═ locate a stolen token: team-analytics/analytics-job ═</span>\n` +
+                `<span style="color:#b8ff3c;"> not found on this node</span>\n` +
+                `\n` +
+                `<span style="color:#00e5d4;">═ reach the internet: pivot to HuggingFace (the ExploitGym objective) ═</span>\n` +
+                `<span style="color:#b8ff3c;"> [contained] huggingface.co unreachable - no host-network escape</span>\n` +
+                `\n` +
+                `<span style="color:#a8cfca;">═ payload complete ═</span>`,
+            );
+
+            printPre(
+              `<span style="color:#a8cfca;"># The 0-day STILL fired - code ran in the proxy's zone - but it went</span>\n` +
+                `<span style="color:#a8cfca;"># nowhere: canary unreachable, no neighbor token, HuggingFace unreachable.</span>\n` +
+                `<span style="color:#a8cfca;"># It never escaped the guest's network namespace, so it never got the</span>\n` +
+                `<span style="color:#a8cfca;"># node's network position.</span>`,
+            );
+
+            addEvent(
+              "Info",
+              "DeserializationContained",
+              `zone/${EXPLOITGYM_EDERA_ZONE_ID}`,
+              "identical RCE fired inside the Edera zone but could not reach the host canary, neighbor tokens, or the internet",
+            );
+          }
+
+          return;
+        }
+
+        if (tokens[0] === "falco_alerts") {
+          const source = tokens[1];
+
+          if (source !== "host" && source !== "zone") {
+            printHtml(
+              `<span style="color:#ff7373;">falco_alerts: choose a source. Try: falco_alerts host | falco_alerts zone</span>`,
+            );
+            return;
+          }
+
+          if (source === "host") {
+            printPre(
+              `<span style="color:#a8cfca;">…querying Falco (host source)…</span>\n` +
+                `<span style="color:#ff7373;">  [CRITICAL] Host Canary Exfiltrated (host)   file=/opt/host-canary</span>\n` +
+                `<span style="color:#ffd166;">  [WARNING] Namespace Breakout Attempt (host)</span>\n` +
+                `<span style="color:#ffd166;">  [WARNING] Untrusted Deserialization RCE (host)</span>`,
+            );
+            addEvent(
+              "Warning",
+              "FalcoDetection: Host Canary Exfiltrated",
+              "host",
+              "host-source Falco saw the canary read on the node filesystem (file=/opt/host-canary)",
+            );
+          } else {
+            const z = EXPLOITGYM_EDERA_ZONE_ID;
+            printPre(
+              `<span style="color:#a8cfca;">…querying Falco (zone source)…</span>\n` +
+                `<span style="color:#00e5d4;">  [NOTICE] Host Canary Read Confined to Edera Zone   zone_id=${z}</span>\n` +
+                `<span style="color:#00e5d4;">  [NOTICE] Untrusted Deserialization RCE (edera zone)   zone_id=${z}</span>\n` +
+                `<span style="color:#ffd166;">  [WARNING] Namespace Breakout Attempt (edera zone)   zone_id=${z}</span>`,
+            );
+            addEvent(
+              "Info",
+              "FalcoDetection: Host Canary Read Confined to Edera Zone",
+              `zone/${z}`,
+              "zone-source Falco attributes the same activity to the Edera zone, confined - never reached the host",
+            );
+          }
+
+          return;
+        }
+
         printHtml(
           `<span style="color:#ff7373;">command not found: ${escapeHtml(
             rawCmd,
