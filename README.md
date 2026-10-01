@@ -586,3 +586,35 @@ Whereas, the ```find``` command produces the clean relative paths:
 ```
 find . -type f
 ```
+
+## ExploitGym
+Shows the three pods. <br/>
+The point to notice: ```proxy-control``` has ```<none>``` for RuntimeClass (shared host kernel), <br/>
+while ```proxy-edera``` has ```edera``` (isolated zone). Same proxy, two isolation models.
+```
+kubectl get pods -n exploitgym agent proxy-control proxy-edera -o custom-columns=POD:.metadata.name,RUNTIME_CLASS:.spec.runtimeClassName,ROLE:.metadata.labels.variant
+```
+Confirms the agent is sandboxed — it can't reach ```huggingface.co``` directly (```000``` then ```BLOCKED```).<br/>
+Its only egress is the cache proxy, which sets up why it attacks the proxy.
+```
+agent_to_hf
+```
+Fires the deserialization 0-day at the shared-kernel proxy. <br/>
+The RCE escapes to the node: reads the host canary, steals a neighbor tenant's token, dumps the ```payments-db``` credentials, and pivots out to HuggingFace. This is the bad outcome.
+```
+attack control
+```
+Queries Falco's host source. Shows the escape as ```CRITICAL```/```WARNING``` host-level detections (canary exfiltrated, namespace breakout, untrusted deserialization).
+```
+falco_alerts host
+```
+Fires the identical payload at the Edera-isolated proxy. The RCE still runs (```whoami: 0:0```), but every step comes back ```[contained]``` — canary unreachable, no neighbor token, HuggingFace unreachable. Same exploit, contained.
+```
+attack edera
+```
+Queries Falco's zone source. Shows the same activity attributed to the Edera zone and confined to it (```NOTICE```/```WARNING``` with the ```zone_id```), never reaching the host.
+```
+falco_alerts zone
+```
+<b>A couple of notes<b/>: the commands are order-independent in the code, so you can run them standalone, but 1→6 is the narrative arc (sandbox → escape → contained). <br/>
+Each one also drops entries into the Lifecycle Events panel on the right. And help now lists all six under an "<b>ExploitGym breakout<b/>" section if you want them in-app.
