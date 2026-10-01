@@ -903,7 +903,7 @@ async function initTerminalDemo() {
       </header>
 
       <section class="brand-hero" aria-labelledby="hero-title">
-        <div class="hero-eyebrow">WEBERNETES DEMO</div>
+        <div class="hero-eyebrow">ARE YOU READY TO CYW?</div>
         <h2 id="hero-title">CONTAIN YOUR<br />WORKLOADS</h2>
         <p>
           Edera is the secure execution platform for all software — built so every
@@ -1515,6 +1515,17 @@ vfio_pci`;
   let falcoStreamMode: "node" | "helm" | null = null;
 
   const activeRuntimeClasses = new Set<string>();
+
+  // A pod's runtimeClassName is only "effective" once that RuntimeClass
+  // actually exists in the cluster. Until it's created the pod can't be
+  // admitted, so kubectl output treats it as having no runtime class. We use
+  // this anywhere runtimeClassName is surfaced (custom-columns, jsonpath,
+  // describe) so the ExploitGym proxy only reads as `edera` after the user
+  // applies edera/runtimeclass-edera.yaml.
+  const effectiveRuntimeClass = (pod: LocalPod): string | undefined =>
+    pod.runtimeClassName && activeRuntimeClasses.has(pod.runtimeClassName)
+      ? pod.runtimeClassName
+      : undefined;
 
   let namespaces: LocalNamespace[] = [
     { name: "default", status: "Active", age: "10m" },
@@ -5033,7 +5044,7 @@ Kernel isolation: enabled</span>`);
           pod.node && pod.node !== "<none>" ? pod.node : "<none>";
         const podIp =
           pod.ip && pod.ip !== "<none>" ? pod.ip : "<none>";
-        const runtimeClass = pod.runtimeClassName || "<none>";
+        const runtimeClass = effectiveRuntimeClass(pod) || "<none>";
         const workloadText = workload
           ? `${workload.name} (zone ${workload.zone})`
           : "<none>";
@@ -5422,7 +5433,7 @@ Kernel isolation: enabled</span>`);
               case ".metadata.namespace":
                 return pod.namespace;
               case ".spec.runtimeClassName":
-                return pod.runtimeClassName || "<none>";
+                return effectiveRuntimeClass(pod) || "<none>";
               case ".spec.nodeName":
                 return pod.node || "<none>";
               case ".status.phase":
@@ -5504,7 +5515,7 @@ Kernel isolation: enabled</span>`);
 
           printPre(
             `<span style="color:#dff7f0;">${escapeHtml(
-              pod.runtimeClassName || "",
+              effectiveRuntimeClass(pod) || "",
             )}</span>`,
           );
 
