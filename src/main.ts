@@ -1499,6 +1499,7 @@ vfio_pci`;
     { name: "kube-system", status: "Active", age: "10m" },
     { name: "kube-public", status: "Active", age: "10m" },
     { name: "kube-node-lease", status: "Active", age: "10m" },
+    { name: "exploitgym", status: "Active", age: "10m" },
   ];
 
   let deployments: LocalDeployment[] = [];
@@ -1516,6 +1517,43 @@ vfio_pci`;
       ip: "10.244.0.5",
       node: "node-2",
       labels: { app: "demo" },
+    },
+    // ExploitGym breakout scenario pods. These are real cluster state so they
+    // appear in `kubectl get pods -A`, `-n exploitgym`, and the Active Pods
+    // panel. The two proxies are identical except for runtimeClassName:
+    // proxy-control shares the host kernel, proxy-edera runs in an Edera zone.
+    // The `variant` label is what the ExploitGym custom-columns query reads as
+    // ROLE; the absence of runtimeClassName/variant renders as <none>.
+    {
+      name: "agent",
+      namespace: "exploitgym",
+      status: "Running",
+      age: "6m",
+      image: "exploitgym/agent:1.0",
+      ip: "10.244.0.21",
+      node: "node-1",
+      labels: { app: "agent" },
+    },
+    {
+      name: "proxy-control",
+      namespace: "exploitgym",
+      status: "Running",
+      age: "6m",
+      image: "exploitgym/cache-proxy:1.0",
+      ip: "10.244.0.22",
+      node: "node-1",
+      labels: { app: "cache-proxy", variant: "control" },
+    },
+    {
+      name: "proxy-edera",
+      namespace: "exploitgym",
+      status: "Running",
+      age: "6m",
+      image: "exploitgym/cache-proxy:1.0",
+      ip: "10.244.0.23",
+      node: "node-2",
+      labels: { app: "cache-proxy", variant: "edera" },
+      runtimeClassName: "edera",
     },
   ];
 
@@ -7001,17 +7039,61 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
             tokens[1] === "get" &&
             tokens[2] === "pods" &&
             tokens.includes("-n") &&
-            tokens[tokens.indexOf("-n") + 1] === "exploitgym"
+            tokens[tokens.indexOf("-n") + 1] === "exploitgym" &&
+            rawCmd.includes("custom-columns")
           ) {
-            // ExploitGym breakout scenario: three pods - the agent (the model),
-            // and the cache proxy twice. The two proxies are identical except
-            // for runtimeClassName: proxy-control shares the host kernel, while
-            // proxy-edera runs inside an isolated Edera zone.
+            // The real `kubectl get pods` handler doesn't implement
+            // custom-columns, so we render the POD/RUNTIME_CLASS/ROLE view the
+            // ExploitGym demo uses. We build it from the LIVE pod state (not a
+            // hardcoded table) so it always agrees with `kubectl get pods -A`
+            // and the Active Pods panel, even if a pod is deleted. A plain
+            // `kubectl get pods -n exploitgym` (no custom-columns) falls
+            // through to the standard table handler below.
+            const exploitgymPods = ["agent", "proxy-control", "proxy-edera"]
+              .map((name) =>
+                pods.find(
+                  (pod) =>
+                    pod.namespace === "exploitgym" && pod.name === name,
+                ),
+              )
+              .filter((pod): pod is LocalPod => Boolean(pod));
+
+            if (exploitgymPods.length === 0) {
+              printHtml(
+                `<span style="color:#a8cfca;">No resources found in exploitgym namespace.</span>`,
+              );
+              return;
+            }
+
+            const padRight = (value: string, width: number) =>
+              value.length >= width
+                ? `${value} `
+                : value + " ".repeat(width - value.length);
+            const POD_W = 17;
+            const RC_W = 16;
+
+            const headerLine = `${padRight("POD", POD_W)}${padRight(
+              "RUNTIME_CLASS",
+              RC_W,
+            )}ROLE`;
+            const rowLines = exploitgymPods.map((pod) => {
+              const runtimeClass = pod.runtimeClassName || "<none>";
+              const role = pod.labels.variant || "<none>";
+              const line =
+                padRight(pod.name, POD_W) +
+                padRight(runtimeClass, RC_W) +
+                role;
+              // Highlight the Edera-isolated proxy, like the original view.
+              const color =
+                pod.runtimeClassName === "edera" ? "#b8ff3c" : "#dff7f0";
+              return `<span style="color:${color};">${escapeHtml(line)}</span>`;
+            });
+
             printPre(
-              `<span style="color:#dff7f0;">POD              RUNTIME_CLASS   ROLE</span>\n` +
-                `<span style="color:#dff7f0;">agent            &lt;none&gt;          &lt;none&gt;</span>\n` +
-                `<span style="color:#dff7f0;">proxy-control    &lt;none&gt;          control</span>\n` +
-                `<span style="color:#b8ff3c;">proxy-edera      edera           edera</span>`,
+              [
+                `<span style="color:#dff7f0;">${escapeHtml(headerLine)}</span>`,
+                ...rowLines,
+              ].join("\n"),
             );
             addEvent(
               "Normal",
