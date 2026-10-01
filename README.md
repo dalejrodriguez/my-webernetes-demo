@@ -608,7 +608,8 @@ The RCE escapes to the node:
 ```
 attack control
 ```
-Queries Falco's host source. Shows the escape as ```CRITICAL```/```WARNING``` host-level detections:
+Queries Falco's host source. <br/>
+Shows the escape as ```CRITICAL```/```WARNING``` host-level detections:
 
 - Canary exfiltrated
 - Namespace breakout
@@ -617,7 +618,8 @@ Queries Falco's host source. Shows the escape as ```CRITICAL```/```WARNING``` ho
 ```
 falco_alerts host
 ```
-Fires the identical payload at the Edera-isolated proxy. The RCE still runs (```whoami: 0:0```), but every step comes back ```[contained]``` 
+Fires the identical payload at the Edera-isolated proxy. <br/>
+The RCE still runs (```whoami: 0:0```), but every step comes back ```[contained]``` 
 - Canary unreachable
 - No neighbor token
 - HuggingFace unreachable... Same exploit, contained.
