@@ -818,10 +818,32 @@ const PROTECT_DEMO_STEPS: DemoStep[] = [
 // independently when toggling between them.
 const EXPLOITGYM_DEMO_STEPS: DemoStep[] = [
   {
+    // Reuses the Edera demo's step id and command: applying this manifest adds
+    // the "edera" RuntimeClass to the cluster. Until it exists, proxy-edera
+    // stays Pending (it requests runtimeClassName: edera in its spec but can't
+    // be admitted). Sharing the id means the step auto-completes if the user
+    // already created the class in the Edera demo.
+    id: "edera-runtimeclass-apply",
+    title: "Create the Edera RuntimeClass",
+    description:
+      "Create the <code class='guide-code'>edera</code> RuntimeClass. <code class='guide-code'>proxy-edera</code> requests it in its pod spec, so until this exists the pod stays <code class='guide-code'>Pending</code> - just like the Edera demo.",
+    command: "kubectl apply -f edera/runtimeclass-edera.yaml",
+  },
+  {
+    // Reuses the Edera demo's node-label step id/command. The edera
+    // RuntimeClass schedules via a runtime=edera node selector, so labelling a
+    // node lets proxy-edera finally schedule and become Running.
+    id: "edera-node-label",
+    title: "Schedule the Edera proxy onto an Edera node",
+    description:
+      "Label <code class='guide-code'>node-3</code> with <code class='guide-code'>runtime=edera</code>. The RuntimeClass uses this node selector, so once a matching node exists <code class='guide-code'>proxy-edera</code> schedules and moves to <code class='guide-code'>Running</code>.",
+    command: "kubectl label node node-3 runtime=edera",
+  },
+  {
     id: "exploitgym-pods",
     title: "Inspect the ExploitGym pods",
     description:
-      "List the three scenario pods. Notice <code class='guide-code'>proxy-control</code> shares the host kernel (no runtimeClass) while <code class='guide-code'>proxy-edera</code> runs inside an isolated Edera zone.",
+      "List the three scenario pods. With the RuntimeClass created, <code class='guide-code'>proxy-edera</code> is now Running inside an isolated Edera zone, while <code class='guide-code'>proxy-control</code> shares the host kernel (no runtimeClass).",
     command:
       "kubectl get pods -n exploitgym agent proxy-control proxy-edera -o custom-columns=POD:.metadata.name,RUNTIME_CLASS:.spec.runtimeClassName,ROLE:.metadata.labels.variant",
   },
@@ -1547,11 +1569,11 @@ vfio_pci`;
     {
       name: "proxy-edera",
       namespace: "exploitgym",
-      status: "Running",
+      status: "Pending",
       age: "6m",
       image: "exploitgym/cache-proxy:1.0",
-      ip: "10.244.0.23",
-      node: "node-2",
+      ip: "<none>",
+      node: "<none>",
       labels: { app: "cache-proxy", variant: "edera" },
       runtimeClassName: "edera",
     },
@@ -5328,6 +5350,141 @@ Kernel isolation: enabled</span>`);
             !["pod", "pods"].includes(token),
         );
 
+        // Generic `-o custom-columns=HEADER:jsonpath,...` support. Works for
+        // any namespace scope (-n <ns>, -A) and honors an explicit list of pod
+        // names, so these are all consistent:
+        //   kubectl get pods -A -o custom-columns=...
+        //   kubectl get pods -n exploitgym -o custom-columns=...
+        //   kubectl get pods -n exploitgym agent -o custom-columns=...
+        const customColumnsMatch = rawCmd.match(/custom-columns=(\S+)/);
+        if (customColumnsMatch) {
+          const columns = customColumnsMatch[1].split(",").map((part) => {
+            const sep = part.indexOf(":");
+            return {
+              header: sep >= 0 ? part.slice(0, sep) : part,
+              path: sep >= 0 ? part.slice(sep + 1) : "",
+            };
+          });
+
+          // Positional pod names, skipping flags and the values consumed by
+          // -n / -o / -l so the output spec itself is never read as a name.
+          const requestedNames: string[] = [];
+          for (let i = 3; i < tokens.length; i++) {
+            const token = tokens[i];
+            if (
+              token === "-n" ||
+              token === "--namespace" ||
+              token === "-o" ||
+              token === "--output" ||
+              token === "-l" ||
+              token === "--selector"
+            ) {
+              i++;
+              continue;
+            }
+            if (token.startsWith("-")) continue;
+            if (token === "pod" || token === "pods") continue;
+            requestedNames.push(token);
+          }
+
+          let selected = pods.filter(
+            (pod) => allNamespaces || pod.namespace === namespaceFilter,
+          );
+
+          if (requestedNames.length > 0) {
+            const missing = requestedNames.find(
+              (reqName) => !selected.some((pod) => pod.name === reqName),
+            );
+            if (missing) {
+              printHtml(
+                `<span style="color:#ff7373;">Error from server (NotFound): pods "${escapeHtml(
+                  missing,
+                )}" not found</span>`,
+              );
+              return true;
+            }
+            selected = selected.filter((pod) =>
+              requestedNames.includes(pod.name),
+            );
+          }
+
+          if (selected.length === 0) {
+            printHtml(
+              `<span style="color:#a8cfca;">No resources found.</span>`,
+            );
+            return true;
+          }
+
+          const resolvePath = (pod: LocalPod, path: string): string => {
+            switch (path) {
+              case ".metadata.name":
+                return pod.name;
+              case ".metadata.namespace":
+                return pod.namespace;
+              case ".spec.runtimeClassName":
+                return pod.runtimeClassName || "<none>";
+              case ".spec.nodeName":
+                return pod.node || "<none>";
+              case ".status.phase":
+                return pod.status;
+              case ".status.podIP":
+                return pod.ip || "<none>";
+              default: {
+                const labelMatch = path.match(/^\.metadata\.labels\.(.+)$/);
+                if (labelMatch) {
+                  return pod.labels[labelMatch[1]] || "<none>";
+                }
+                return "<none>";
+              }
+            }
+          };
+
+          const rows = selected.map((pod) =>
+            columns.map((col) => resolvePath(pod, col.path)),
+          );
+          // kubectl pads each column to its widest cell plus a 3-space gutter;
+          // the final column is left unpadded.
+          const widths = columns.map(
+            (col, idx) =>
+              Math.max(
+                col.header.length,
+                ...rows.map((row) => row[idx].length),
+              ) + 3,
+          );
+          const padRight = (value: string, width: number) =>
+            value.length >= width
+              ? `${value} `
+              : value + " ".repeat(width - value.length);
+          const renderRow = (cells: string[]) =>
+            cells
+              .map((cell, idx) =>
+                idx === cells.length - 1 ? cell : padRight(cell, widths[idx]),
+              )
+              .join("");
+
+          const headerLine = renderRow(columns.map((col) => col.header));
+          const bodyLines = rows.map((row, rowIdx) => {
+            const edera = selected[rowIdx].runtimeClassName === "edera";
+            return `<span style="color:${
+              edera ? "#b8ff3c" : "#dff7f0"
+            };">${escapeHtml(renderRow(row))}</span>`;
+          });
+
+          printPre(
+            [
+              `<span style="color:#dff7f0;">${escapeHtml(headerLine)}</span>`,
+              ...bodyLines,
+            ].join("\n"),
+          );
+
+          // Keep the ExploitGym guide step advancing when its pods are listed.
+          if (selected.some((pod) => pod.namespace === "exploitgym")) {
+            markDemoStepComplete("exploitgym-pods");
+          }
+
+          return true;
+        }
+
         if (
           outputFormat.includes("jsonpath") &&
           outputFormat.includes(".spec.runtimeClassName")
@@ -7041,76 +7198,6 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
             ederaFalcoPluginLoaded = true;
             renderFalcoDebugOutput("helm");
             markDemoStepComplete("falco-logs");
-            return;
-          }
-
-          if (
-            tokens[1] === "get" &&
-            tokens[2] === "pods" &&
-            tokens.includes("-n") &&
-            tokens[tokens.indexOf("-n") + 1] === "exploitgym" &&
-            rawCmd.includes("custom-columns")
-          ) {
-            // The real `kubectl get pods` handler doesn't implement
-            // custom-columns, so we render the POD/RUNTIME_CLASS/ROLE view the
-            // ExploitGym demo uses. We build it from the LIVE pod state (not a
-            // hardcoded table) so it always agrees with `kubectl get pods -A`
-            // and the Active Pods panel, even if a pod is deleted. A plain
-            // `kubectl get pods -n exploitgym` (no custom-columns) falls
-            // through to the standard table handler below.
-            const exploitgymPods = ["agent", "proxy-control", "proxy-edera"]
-              .map((name) =>
-                pods.find(
-                  (pod) =>
-                    pod.namespace === "exploitgym" && pod.name === name,
-                ),
-              )
-              .filter((pod): pod is LocalPod => Boolean(pod));
-
-            if (exploitgymPods.length === 0) {
-              printHtml(
-                `<span style="color:#a8cfca;">No resources found in exploitgym namespace.</span>`,
-              );
-              return;
-            }
-
-            const padRight = (value: string, width: number) =>
-              value.length >= width
-                ? `${value} `
-                : value + " ".repeat(width - value.length);
-            const POD_W = 17;
-            const RC_W = 16;
-
-            const headerLine = `${padRight("POD", POD_W)}${padRight(
-              "RUNTIME_CLASS",
-              RC_W,
-            )}ROLE`;
-            const rowLines = exploitgymPods.map((pod) => {
-              const runtimeClass = pod.runtimeClassName || "<none>";
-              const role = pod.labels.variant || "<none>";
-              const line =
-                padRight(pod.name, POD_W) +
-                padRight(runtimeClass, RC_W) +
-                role;
-              // Highlight the Edera-isolated proxy, like the original view.
-              const color =
-                pod.runtimeClassName === "edera" ? "#b8ff3c" : "#dff7f0";
-              return `<span style="color:${color};">${escapeHtml(line)}</span>`;
-            });
-
-            printPre(
-              [
-                `<span style="color:#dff7f0;">${escapeHtml(headerLine)}</span>`,
-                ...rowLines,
-              ].join("\n"),
-            );
-            addEvent(
-              "Normal",
-              "PodsListed",
-              "namespace/exploitgym",
-              "listed agent, proxy-control (shared kernel) and proxy-edera (edera runtimeClass)",
-            );
-            markDemoStepComplete("exploitgym-pods");
             return;
           }
 
