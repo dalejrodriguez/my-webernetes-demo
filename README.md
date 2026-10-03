@@ -2,7 +2,7 @@
 This project is a port of a specific subset of the Kubernetes project to make it such that clusters can be booted up in the browser, without any backend server components. If you'd like to learn more about the **Webernetes** project, check out **[ngrok's Github repo](https://github.com/ngrok/webernetes)**.
 
 **Preview:** <br/>
---> https://ndouglas-edera.github.io/my-webernetes-demo
+--> (https://github.com/dalejrodriguez/my-webernetes-demo/)
 <br/><br/>
 **Blog post:** <br/>
 --> https://coderlegion.com/24792/webernetes-kubernetes-in-your-browser
