@@ -891,7 +891,7 @@ async function initTerminalDemo() {
   app.innerHTML = `
     <div class="demo-shell">
 
-      <div class="demo-kicker">Web­ernetes × Edera - interactive isolation demo</div>
+      <div class="demo-kicker" id="demo-kicker">Web­ernetes × Edera - interactive isolation demo</div>
 
       <div class="dashboard-grid">
 
@@ -2082,6 +2082,22 @@ const renderNodes = () => {
           : "🕵️ Try the ExploitGym demo";
       toggleEl.classList.toggle("active", mode === "exploitgym");
     }
+
+    // ExploitGym mode hides the cluster overview panels (pods, nodes, zones)
+    // and retitles the kicker; switching back restores both.
+    const kickerEl = document.querySelector<HTMLDivElement>("#demo-kicker");
+    if (kickerEl) {
+      kickerEl.textContent =
+        mode === "exploitgym"
+          ? "Web\u00adernetes × Edera - ExploitGym Demo"
+          : "Web\u00adernetes × Edera - interactive isolation demo";
+    }
+    const overviewEls = document.querySelectorAll<HTMLElement>(
+      ".dashboard-grid, #protect-panel",
+    );
+    overviewEls.forEach((el) => {
+      el.style.display = mode === "exploitgym" ? "none" : "";
+    });
 
     renderGuide();
   };
