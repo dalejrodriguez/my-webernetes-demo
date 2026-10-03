@@ -891,27 +891,6 @@ async function initTerminalDemo() {
   app.innerHTML = `
     <div class="demo-shell">
 
-      <header class="top-header">
-        <a href="https://edera.dev" class="logo-link">EDERA</a>
-        <a
-          href="https://on.edera.dev"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="edera-free-cta"
-          style="justify-self:end;align-self:center;display:inline-flex;align-items:center;padding:12px 22px;border-radius:999px;background:var(--edera-lime);color:var(--edera-ink);font-weight:800;text-decoration:none;white-space:nowrap;"
-        >Try out Edera for free →</a>
-      </header>
-
-      <section class="brand-hero" aria-labelledby="hero-title">
-        <div class="hero-eyebrow">WEBERNETES DEMO</div>
-        <h2 id="hero-title">CONTAIN YOUR<br />WORKLOADS</h2>
-        <p>
-          Edera is the secure execution platform for all software — built so every
-          untrusted workload runs trusted, and free to move at the speed of your business.
-        </p>
-        <button id="hero-run-btn" class="hero-cta" type="button">Try it Out</button>
-      </section>
-
       <div class="demo-kicker">Web­ernetes × Edera - interactive isolation demo</div>
 
       <div class="dashboard-grid">
@@ -1037,18 +1016,6 @@ async function initTerminalDemo() {
         </div>
       </div>
 
-      <div
-        class="edera-free-bottom"
-        style="display:flex;justify-content:center;margin:32px 0 8px;"
-      >
-        <a
-          href="https://on.edera.dev"
-          target="_blank"
-          rel="noopener noreferrer"
-          style="display:inline-block;padding:14px 30px;border-radius:999px;background:#b8ff3c;color:#081716;font-weight:800;font-size:16px;text-decoration:none;box-shadow:0 10px 30px rgba(184,255,60,.25);"
-        >Try out Edera for free →</a>
-      </div>
-
       <div class="edera-footer">
         <img
           src="https://docs.edera.dev/Ivy%20Headphones.png"
@@ -1086,7 +1053,6 @@ async function initTerminalDemo() {
           <p style="margin:0 0 28px;color:#a8cfca;line-height:1.6;">You've completed the Edera isolation walkthrough. Ready to try Edera for yourself?</p>
           <div class="completion-actions">
             <button id="restart-demo-btn" type="button" class="completion-restart-btn">Start a new session</button>
-            <a href="https://on.edera.dev" target="_blank" rel="noopener noreferrer" class="completion-license-link">Sign up for a free Edera license →</a>
           </div>
         </div>
       </div>
@@ -2148,15 +2114,6 @@ const renderNodes = () => {
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
   });
-  document
-    .querySelector<HTMLButtonElement>("#hero-run-btn")!
-    .addEventListener("click", () => {
-      document
-        .querySelector<HTMLElement>("#guide-panel")!
-        .scrollIntoView({ behavior: "smooth", block: "start" });
-
-      input.focus();
-    });
   const hidePanel = (
     panelId: string,
     bodyId: string,
