@@ -904,9 +904,9 @@ async function initTerminalDemo() {
 
       <section class="brand-hero" aria-labelledby="hero-title">
         <div class="hero-eyebrow">WEBERNETES DEMO</div>
-        <h2 id="hero-title">CONTAIN YOUR<br />WORKLOADS</h2>
+        <h2 id="hero-title">CONTAINER<br />RUNTIME</h2>
         <p>
-          Edera is the secure execution platform for all software — built so every
+          Edera is the secure execution platform for all software. Built so every
           untrusted workload runs trusted, and free to move at the speed of your business.
         </p>
         <button id="hero-run-btn" class="hero-cta" type="button">Jump to Terminal</button>
