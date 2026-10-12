@@ -1598,3 +1598,10 @@ input {
   letter-spacing: 0.05em;
   white-space: nowrap;
 }
+
+/* Hide unwanted text on mobile display */
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+}
