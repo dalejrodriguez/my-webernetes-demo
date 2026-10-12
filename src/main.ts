@@ -996,10 +996,10 @@ async function initTerminalDemo() {
         <div class="guide-header">
           <span class="drag-handle">⋮⋮</span>
           <div>
-<div class="guide-title" id="guide-title">🧭 Edera Demo Guide</div>
-<div class="guide-subtitle" id="guide-subtitle">
-  Run each command below to walk through the isolation lifecycle
-</div>
+            <div class="guide-title" id="guide-title">🧭 Edera Demo Guide</div>
+            <div class="guide-subtitle" id="guide-subtitle">
+              <span class="desktop-only">Run each command below to walk through the isolation lifecycle</span>
+            </div>
           </div>
 
           <div id="guide-progress" class="guide-progress"></div>
