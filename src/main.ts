@@ -998,7 +998,7 @@ async function initTerminalDemo() {
           <div>
             <div class="guide-title" id="guide-title">🧭 Edera Demo Guide</div>
             <div class="guide-subtitle" id="guide-subtitle">
-              Run each command below to walk through the isolation lifecycle
+              <span class="desktop-only">Run each command below to walk through the isolation lifecycle</span>
             </div>
           </div>
 
