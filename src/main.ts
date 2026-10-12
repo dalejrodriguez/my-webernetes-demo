@@ -912,7 +912,7 @@ async function initTerminalDemo() {
         <button id="hero-run-btn" class="hero-cta" type="button">Jump to Terminal</button>
       </section>
 
-      <div class="demo-kicker">Web­ernetes × Edera - interactive isolation demo</div>
+      <div class="demo-kicker">Web­ernetes × Edera - Container Runtime Demo</div>
 
       <div class="dashboard-grid">
 
